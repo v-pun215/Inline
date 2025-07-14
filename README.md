@@ -3,11 +3,7 @@ Turn your Python scripts into outrageous single-line monstrosities.
 
 Because code can be both horrifying and beautiful.
 
-## 🚧 Under Construction
-The current version is a prototype, and things only get better from here.
-
 ### Planned Features
-- a GUI
 - More compatibility
 - Less bugs
 
@@ -18,6 +14,10 @@ It supports:
 - Class-based GUI apps (like customtkinter/tkinter)
 - Inline lambdas and exec-based method handling
 - Variable assignments, setattr, even super() calls — all crunched into one line
+
+## 📖 Quickstart
+- Run main.py using ```python3 main.py```
+- Select target script using the GUI.
 
 ## 🎯 Example
 ### Input (target_script.py)
