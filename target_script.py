@@ -1,1 +1,30 @@
-import customtkinter; from datetime import datetime; import random; QuizApp = type('QuizApp', (customtkinter.CTk,), {'__init__': lambda self: exec("super(type(self), self).__init__()\nself.geometry(\"500x300\")\nself.title(\"Quiz Time\")"), 'show_question': lambda self: exec("question, _ = self.questions[self.current_index]\nself.label.configure(text=question)"), 'check_answer': lambda self: exec("_, correct = self.questions[self.current_index]\nif self.answer_entry.get().strip().lower() == correct.lower():\nself.score += 1\nself.label.configure(text=\"Correct!\")\nelse:\nself.label.configure(text=f\"Wrong! Answer: {correct}\")"), 'next_question': lambda self: exec("self.current_index += 1\nif self.current_index >= len(self.questions):\nself.label.configure(text=f\"Quiz over! Score: {self.score}/{len(self.questions)}\")\nself.answer_entry.configure(state=\"disabled\")\nself.submit_button.configure(state=\"disabled\")\nself.next_button.configure(state=\"disabled\")\nelse:\nself.show_question()\nself.answer_entry.delete(0, \'end\')"), 'say_hello': lambda self, name: exec("now = datetime.now().strftime(\"%H:%M:%S\")\nself.label.configure(text=f\"Hello, {name}! Time is {now}\")")}); app = QuizApp(); app.mainloop()
+"""
+A script to show the user the current time.
+
+Author: Matthew Pitkin
+Email: m.pitkin@lancaster.ac.uk
+Date: 22/06/2020
+"""
+
+# import the required modules
+import datetime
+
+
+def gettime():
+    """
+    A function to return the current time.
+
+    Returns
+    -------
+    tuple:
+        A tuple containing the hour, minutes and seconds.
+    """
+
+    now = datetime.datetime.now()
+
+    return now.hour, now.minute, now.second + 1e-6 * now.microsecond
+
+# get the time
+hour, minute, seconds = gettime()
+
+print(f"The current time is {hour}:{minute}:{seconds}")

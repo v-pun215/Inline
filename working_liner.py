@@ -1,23 +1,9 @@
-import customtkinter as ctk
-import tkinter.filedialog as fd
-import subprocess
 import ast
 import astor
 import re
-import platform
-import CTkMessagebox
-os_name = platform.system().lower()
 
-# ==============================
-#            CONFIG
-# ==============================
 TARGET_FILE = "target_script.py"
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
 
-# ==============================
-#         CORE CONVERTER
-# ==============================
 def extract_parts_ast(code):
     tree = ast.parse(code)
     imports = []
@@ -40,7 +26,8 @@ def extract_parts_ast(code):
                 calls.append((func.value.id, func.attr))
 
     if class_def is None:
-        return "\n".join(imports), None, None, {}, [], [], code
+        # Fallback: treat as non-class script
+        return "\n".join(imports), None, None, {}, [], [], code  # last item is full raw code
 
     class_name = class_def.name
     base_expr = class_def.bases[0] if class_def.bases else None
@@ -64,6 +51,34 @@ def extract_parts_ast(code):
             methods[item.name] = (arg_names, method_lines)
 
     return "; ".join(imports), class_name, base_class, methods, instances, calls
+'''
+def convert_init(lines):
+    exec_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("super().__init__()"):
+            exec_lines.append("super(type(self), self).__init__()")
+        elif stripped.startswith("self.") and "=" in stripped:
+            left, right = stripped.split("=", 1)
+            if "(" in left:
+                exec_lines.append(stripped)
+                continue
+            attr = left.strip().split(".")[1]
+            exec_lines.append(f"setattr(self, '{attr}', {right.strip()})")
+        else:
+            exec_lines.append(stripped)
+
+    # PATCH: Fix lambda self usage
+    for i, line in enumerate(exec_lines):
+        exec_lines[i] = re.sub(
+            r'command\s*=\s*lambda\s*:\s*self\.(\w+)\((.*?)\)',
+            r'command=lambda s=self: s.\1(\2)',
+            line
+        )
+
+    exec_code = "\\n".join(exec_lines).replace('"', '\\"').replace("'", "\\'")
+    return f'lambda self: exec("{exec_code}")'
+'''
 
 def convert_init(lines):
     exec_lines = []
@@ -71,7 +86,8 @@ def convert_init(lines):
         stripped = line.strip()
         if 'collecting' in locals() and collecting:
             continue
-
+        
+        # Handle multi-line value (e.g., lists, dicts)
         if any(stripped.endswith(c) for c in ['[', '(', '{']) and '=' in stripped:
             multiline = [stripped]
             collecting = True
@@ -92,10 +108,12 @@ def convert_init(lines):
         elif stripped.startswith("self.") and "=" in stripped:
             left, right = stripped.split("=", 1)
 
+            # Keep layout assignment lines (like self.button.pack(...))
             if re.match(r"self\.\w+\.(pack|grid|place)\s*\(", stripped):
                 exec_lines.append(stripped)
                 continue
 
+            # If LHS is a method call, keep as-is
             if "(" in left:
                 exec_lines.append(stripped)
                 continue
@@ -106,10 +124,11 @@ def convert_init(lines):
         else:
             exec_lines.append(stripped)
 
+    # PATCH: Fix lambda self usage for inline callbacks
     for i, line in enumerate(exec_lines):
         exec_lines[i] = re.sub(
-            r'command\\s*=\\s*lambda\\s*:\\s*self\\.(\w+)\\((.*?)\\)',
-            r'command=lambda s=self: s.\\1(\\2)',
+            r'command\\s*=\\s*lambda\\s*:\\s*self\\.(\w+)\((.*?)\)',
+            r'command=lambda s=self: s.\1(\2)',
             line
         )
 
@@ -126,6 +145,7 @@ def convert_method(lines, args):
 
 def build_oneliner(imports, class_name, base_class, methods, instances, calls, raw_code=None):
     if class_name:
+        # CLASS-BASED LOGIC
         method_lines = []
         for name, (args, body) in methods.items():
             if name == "__init__":
@@ -138,6 +158,7 @@ def build_oneliner(imports, class_name, base_class, methods, instances, calls, r
         call_str = "; ".join(f"{i}.{m}()" for i, m in calls)
         return f"{imports}; {class_def}; {instance_str}; {call_str}"
     else:
+        # NON-CLASS SCRIPT
         code = raw_code.replace('"', '\\"').replace("'", "\\'").replace("\n", "\\n")
         return f"{imports}; exec(\"{code}\")"
 
@@ -150,56 +171,5 @@ def convert_file(path):
         f.write(oneliner)
     return oneliner
 
-class InlineGUI(ctk.CTk):
-    def __init__(self):
-        super().__init__()
-        self.title("Inline")
-        self.geometry("640x400")
-        self.resizable(False, False)
-
-        self.file_path = ctk.StringVar(value="No file selected")
-
-        ctk.CTkLabel(self, text="Target File:").pack(pady=(20, 5))
-        self.path_label = ctk.CTkEntry(self, textvariable=self.file_path, width=400)
-        self.path_label.pack()
-
-        browse = ctk.CTkButton(self, text="Browse", command=self.browse_file)
-        browse.pack(pady=10)
-
-        self.convert_button = ctk.CTkButton(self, text="Convert to One-Liner", command=self.convert)
-        self.convert_button.pack(pady=10)
-
-        self.run_button = ctk.CTkButton(self, text="Run Target Script", command=self.run_file)
-        self.run_button.pack(pady=10)
-
-        self.output = ctk.CTkTextbox(self, width=560, height=130)
-        self.output.pack(pady=15)
-
-    def browse_file(self):
-        path = fd.askopenfilename(filetypes=[("Python Files", "*.py")])
-        if path:
-            self.file_path.set(path)
-
-    def convert(self):
-        try:
-            msg = CTkMessagebox.CTkMessagebox(title="Are you sure?", message="This process is NOT reversable. There is no guarantee that the target script will work. By click OK, you deem yourself liable for whatever you do.", icon="cancel", option_2="Yes", option_1="No")
-            if msg.get() == "No":
-                return
-            result = convert_file(self.file_path.get())
-            self.output.delete("1.0", "end")
-            self.output.insert("end", result)
-        except Exception as e:
-            self.output.insert("end", f"[ERROR] {e}\n")
-
-    def run_file(self):
-        try:
-            if os_name == "windows":
-                subprocess.run(["python", self.file_path.get()], check=False)
-            else:
-                subprocess.run(["python3", self.file_path.get()], check=False)
-        except Exception as e:
-            self.output.insert("end", f"[ERROR] Failed to run script: {e}\n")
-
 if __name__ == "__main__":
-    app = InlineGUI()
-    app.mainloop()
+    print(convert_file(TARGET_FILE))
