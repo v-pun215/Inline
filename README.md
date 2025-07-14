@@ -12,10 +12,10 @@ The current version is a prototype, and things only get better from here.
 - Less bugs
 
 ## 🚀 What is Inline?
-Inline is a Python converter that takes multi-line, class-based Python scripts and transforms them into tightly packed, functional one-liners. Ideal for fun, code golfing, or just confusing your future self.
+Inline is a Python converter that takes multi-line Python scripts and transforms them into tightly packed, functional one-liners. Ideal for fun, code golfing, or just confusing your future self.
 
 It supports:
-- Class-based GUI apps (like customtkinter)
+- Class-based GUI apps (like customtkinter/tkinter)
 - Inline lambdas and exec-based method handling
 - Variable assignments, setattr, even super() calls — all crunched into one line
 
