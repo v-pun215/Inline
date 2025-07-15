@@ -6,14 +6,38 @@ import astor
 import re
 import platform
 import CTkMessagebox
+import json
+import os
+import logging
+
 os_name = platform.system().lower()
 
 # ==============================
-#            CONFIG
+#           SETTINGS
 # ==============================
-TARGET_FILE = "target_script.py"
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
+DEFAULT_SETTINGS = {
+    "theme": "blue",
+    "appearance": "dark",
+    "warn_on_overwrite": True
+}
+
+def load_settings():
+    if not os.path.exists("settings.json"):
+        with open("settings.json", "w") as f:
+            json.dump(DEFAULT_SETTINGS, f, indent=4)
+        return DEFAULT_SETTINGS
+    with open("settings.json", "r") as f:
+        return json.load(f)
+
+settings = load_settings()
+
+# ==============================
+#         LOGGING SETUP
+# ==============================
+logging.basicConfig(filename="inline_debug.log", level=logging.INFO)
+
+def log(msg):
+    logging.info(msg)
 
 # ==============================
 #         CORE CONVERTER
@@ -144,61 +168,94 @@ def build_oneliner(imports, class_name, base_class, methods, instances, calls, r
 def convert_file(path):
     with open(path) as f:
         code = f.read()
+
+    if 'type(' in code and 'exec(' in code:
+        raise Exception("This file already appears to be converted.")
+
     parts = extract_parts_ast(code)
     oneliner = build_oneliner(*parts)
     with open(path, "w") as f:
         f.write(oneliner)
     return oneliner
 
+# ==============================
+#            GUI
+# ==============================
+ctk.set_appearance_mode(settings["appearance"])
+ctk.set_default_color_theme(settings["theme"])
+
 class InlineGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Inline")
-        self.geometry("640x400")
+        self.geometry("640x420")
         self.resizable(False, False)
 
         self.file_path = ctk.StringVar(value="No file selected")
 
         ctk.CTkLabel(self, text="Target File:").pack(pady=(20, 5))
-        self.path_label = ctk.CTkEntry(self, textvariable=self.file_path, width=400)
+        self.path_label = ctk.CTkEntry(self, textvariable=self.file_path, width=400, placeholder_text="Select a Python file to convert")
         self.path_label.pack()
 
         browse = ctk.CTkButton(self, text="Browse", command=self.browse_file)
         browse.pack(pady=10)
 
         self.convert_button = ctk.CTkButton(self, text="Convert to One-Liner", command=self.convert)
-        self.convert_button.pack(pady=10)
+        self.convert_button.pack(pady=5)
 
         self.run_button = ctk.CTkButton(self, text="Run Target Script", command=self.run_file)
-        self.run_button.pack(pady=10)
+        self.run_button.pack(pady=5)
+
+        clear_button = ctk.CTkButton(self, text="Clear Output", command=lambda: self.output.delete("1.0", "end"))
+        clear_button.pack(pady=5)
 
         self.output = ctk.CTkTextbox(self, width=560, height=130)
-        self.output.pack(pady=15)
+        self.output.pack(pady=10)
+
+        self.status = ctk.CTkLabel(self, text="Ready.", anchor="w")
+        self.status.place(relx=0.5, y=400, anchor="center")
 
     def browse_file(self):
-        path = fd.askopenfilename(filetypes=[("Python Files", "*.py")])
+        path = fd.askopenfilename(filetypes=[("Python Files", "*.py *.pyw")])
         if path:
             self.file_path.set(path)
+            log(f"Selected file: {path}")
 
     def convert(self):
         try:
-            msg = CTkMessagebox.CTkMessagebox(title="Are you sure?", message="This process is NOT reversable. There is no guarantee that the target script will work. By click OK, you deem yourself liable for whatever you do.", icon="cancel", option_2="Yes", option_1="No")
-            if msg.get() == "No":
-                return
+            if settings.get("warn_on_overwrite", True):
+                msg = CTkMessagebox.CTkMessagebox(title="Are you sure?",
+                    message="This process is NOT reversible. There is no guarantee that the target script will work. By clicking OK, you deem yourself liable for whatever you do.",
+                    icon="cancel", option_2="Yes", option_1="No")
+                if msg.get() == "No":
+                    return
+            self.status.configure(text="Converting...")
             result = convert_file(self.file_path.get())
             self.output.delete("1.0", "end")
+            self.output.insert("end", "[SUCCESS] Conversion complete.\n")
             self.output.insert("end", result)
+            self.status.configure(text="Conversion complete.")
+            log("Conversion successful.")
+        except SyntaxError as se:
+            self.output.insert("end", f"[SYNTAX ERROR] {se}\n")
+            self.status.configure(text="Syntax error.")
+            log(f"Syntax error: {se}")
         except Exception as e:
             self.output.insert("end", f"[ERROR] {e}\n")
+            self.status.configure(text="Error during conversion.")
+            log(f"Error: {e}")
 
     def run_file(self):
         try:
-            if os_name == "windows":
-                subprocess.run(["python", self.file_path.get()], check=False)
-            else:
-                subprocess.run(["python3", self.file_path.get()], check=False)
+            self.status.configure(text="Running script...")
+            cmd = ["python", self.file_path.get()] if os_name == "windows" else ["python3", self.file_path.get()]
+            subprocess.run(cmd, check=False)
+            self.status.configure(text="Script execution finished.")
+            log("Script executed.")
         except Exception as e:
             self.output.insert("end", f"[ERROR] Failed to run script: {e}\n")
+            self.status.configure(text="Execution failed.")
+            log(f"Execution failed: {e}")
 
 if __name__ == "__main__":
     app = InlineGUI()
