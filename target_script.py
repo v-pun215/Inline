@@ -1,10 +1,13 @@
-import tkinter
+def my_decorator(func):
+    def wrapper(*args, **kwargs):
+        print("Something is happening before the function is called.")
+        result = func(*args, **kwargs)
+        print("Something is happening after the function is called.")
+        return result
+    return wrapper
 
-app = tkinter.Tk()
-app.title("Simple Tkinter App")
-app.geometry("300x200")
-def on_button_click():
-    print("Button clicked!")
-button = tkinter.Button(app, text="Click Me", command=on_button_click)
-button.pack(pady=20)
-app.mainloop()
+@my_decorator
+def say_hello(name):
+    print(f"Hello, {name}!")
+
+say_hello("Alice")
